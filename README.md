@@ -205,5 +205,11 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## Handsoff notes
 
-<!-- handsoff-issue-206 -->
-- #206: backend: add unit tests for `src/services/evidence.service.ts`
+<!-- handsoff-issue-196 -->
+- #196: backend: add unit tests for `src/services/auditTrail.service.ts`
+
+<!-- handsoff-issue-197 -->
+- #197: backend: add unit tests for `src/services/contract.service.ts`
+
+<!-- handsoff-issue-198 -->
+- #198: backend: add unit tests for `src/services/dailyReconciliation.service.ts`
