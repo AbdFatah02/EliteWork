@@ -207,3 +207,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 <!-- handsoff-issue-200 -->
 - #200: backend: add unit tests for `src/services/disputeCategory.service.ts`
+
+<!-- handsoff-issue-201 -->
+- #201: backend: add unit tests for `src/services/dispute.service.ts`
