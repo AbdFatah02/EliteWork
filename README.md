@@ -207,3 +207,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 <!-- handsoff-issue-196 -->
 - #196: backend: add unit tests for `src/services/auditTrail.service.ts`
+
+<!-- handsoff-issue-197 -->
+- #197: backend: add unit tests for `src/services/contract.service.ts`
