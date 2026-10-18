@@ -202,3 +202,8 @@ step-by-step example.
 Distributed under the MIT License. See `LICENSE` for more information.
 
 // setting up and starting out
+
+## Handsoff notes
+
+<!-- handsoff-issue-196 -->
+- #196: backend: add unit tests for `src/services/auditTrail.service.ts`
