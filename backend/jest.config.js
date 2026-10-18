@@ -21,6 +21,7 @@ module.exports = {
     "!src/**/*.d.ts",
     "!src/index.ts",
     "!src/**/*.types.ts",
+    "!src/__tests__/**",
   ],
   coverageThreshold: {
     global: {

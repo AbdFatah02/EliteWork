@@ -8,5 +8,5 @@ export const addNoteSchema = z.object({
 });
 
 export const tradeIdParamSchema = z.object({
-  id: z.string().min(1, "Trade ID is required"),
+  id: z.string().trim().min(1, "Trade ID is required"),
 });
