@@ -210,3 +210,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 <!-- handsoff-issue-197 -->
 - #197: backend: add unit tests for `src/services/contract.service.ts`
+
+<!-- handsoff-issue-198 -->
+- #198: backend: add unit tests for `src/services/dailyReconciliation.service.ts`
