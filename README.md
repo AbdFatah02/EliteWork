@@ -207,3 +207,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 <!-- handsoff-issue-209 -->
 - #209: backend: add unit tests for `src/services/manifest.service.ts`
+
+<!-- handsoff-issue-210 -->
+- #210: backend: add unit tests for `src/services/mediatorQuorum.service.ts`
