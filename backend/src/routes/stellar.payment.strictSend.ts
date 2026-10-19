@@ -1,11 +1,17 @@
+/**
+ * Stellar strict-send path-payment route — migrated from routes-d/ (see docs/backend.md §13).
+ *
+ * POST /stellar/payments/strict-send
+ *   Builds a pathPaymentStrictSend XDR transaction envelope ready for signing.
+ */
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import * as StellarSdk from "@stellar/stellar-sdk";
-
-const STELLAR_NETWORK = process.env.STELLAR_NETWORK || "testnet";
+import { horizonServer } from "../config/stellar";
+import { appLogger } from "../middleware/logger";
 
 const networkPassphrase =
-  STELLAR_NETWORK === "mainnet"
+  process.env.STELLAR_NETWORK === "mainnet"
     ? StellarSdk.Networks.PUBLIC
     : StellarSdk.Networks.TESTNET;
 
@@ -32,10 +38,7 @@ export function createStrictSendPaymentRouter(): Router {
     const parsed = StrictSendSchema.safeParse(req.body);
 
     if (!parsed.success) {
-      res.status(400).json({
-        error: "Validation failed",
-        details: parsed.error.issues,
-      });
+      res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
       return;
     }
 
@@ -51,13 +54,7 @@ export function createStrictSendPaymentRouter(): Router {
     } = parsed.data;
 
     try {
-      const server = new StellarSdk.Horizon.Server(
-        STELLAR_NETWORK === "mainnet"
-          ? "https://horizon.stellar.org"
-          : "https://horizon-testnet.stellar.org"
-      );
-
-      const account = await server.loadAccount(sourceAccount);
+      const account = await horizonServer.loadAccount(sourceAccount);
 
       const sendAsset = sourceAsset
         ? new StellarSdk.Asset(sourceAsset.code, sourceAsset.issuer)
@@ -65,7 +62,7 @@ export function createStrictSendPaymentRouter(): Router {
 
       const destAsset = new StellarSdk.Asset(
         destinationAsset.code,
-        destinationAsset.issuer
+        destinationAsset.issuer,
       );
 
       const pathAssets = path.map((p) => new StellarSdk.Asset(p.code, p.issuer));
@@ -100,8 +97,7 @@ export function createStrictSendPaymentRouter(): Router {
       });
     } catch (error: unknown) {
       if (
-        typeof error === "object" &&
-        error !== null &&
+        typeof error === "object" && error !== null &&
         "response" in error &&
         (error as { response?: { status?: number } }).response?.status === 404
       ) {
@@ -109,6 +105,7 @@ export function createStrictSendPaymentRouter(): Router {
         return;
       }
 
+      appLogger.error({ error, sourceAccount }, "Failed to build strict-send payment");
       const msg = error instanceof Error ? error.message : String(error);
       res.status(502).json({
         error: "Failed to build strict-send path payment",
@@ -119,3 +116,5 @@ export function createStrictSendPaymentRouter(): Router {
 
   return router;
 }
+
+export const stellarStrictSendRoutes = createStrictSendPaymentRouter();

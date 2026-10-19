@@ -1,21 +1,19 @@
+/**
+ * Stellar latest-ledger route — migrated from routes-d/ (see docs/backend.md §13).
+ *
+ * GET /stellar/ledger/latest
+ *   Returns the most recently closed ledger's sequence, hash, and statistics.
+ */
 import { Router, Request, Response } from "express";
-import * as StellarSdk from "@stellar/stellar-sdk";
-
-const STELLAR_NETWORK = process.env.STELLAR_NETWORK || "testnet";
-
-const HORIZON_URL =
-  STELLAR_NETWORK === "mainnet"
-    ? "https://horizon.stellar.org"
-    : "https://horizon-testnet.stellar.org";
+import { horizonServer } from "../config/stellar";
+import { appLogger } from "../middleware/logger";
 
 export function createLedgerRouter(): Router {
   const router = Router();
 
-  router.get("/ledger/latest", async (_req: Request, res: Response) => {
+  router.get("/latest", async (_req: Request, res: Response) => {
     try {
-      const server = new StellarSdk.Horizon.Server(HORIZON_URL);
-
-      const ledgerResponse = await server
+      const ledgerResponse = await horizonServer
         .ledgers()
         .order("desc")
         .limit(1)
@@ -37,6 +35,7 @@ export function createLedgerRouter(): Router {
         txCount: latest.successful_transaction_count,
       });
     } catch (error: unknown) {
+      appLogger.error({ error }, "Failed to fetch latest ledger from Stellar");
       const msg = error instanceof Error ? error.message : String(error);
       res.status(502).json({
         error: "Failed to fetch latest ledger from Stellar network",
@@ -47,3 +46,5 @@ export function createLedgerRouter(): Router {
 
   return router;
 }
+
+export const stellarLedgerRoutes = createLedgerRouter();
