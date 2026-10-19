@@ -13,7 +13,7 @@ in `infra/terraform/modules/` consumes its outputs:
 |---|---|
 | [`rds`](../rds/README.md) | `vpc_id`, `private_subnet_ids` — Aurora cluster placement and its security group |
 | [`redis`](../redis/README.md) | `vpc_id`, `private_subnet_ids` — ElastiCache replication group placement and its security group |
-| [`eks`](../eks/) | `vpc_id`, `private_subnet_ids` — control plane VPC config and node group subnets |
+| [`eks`](../eks/README.md) | `vpc_id`, `private_subnet_ids` — control plane VPC config and node group subnets |
 | [`admin_isolation`](../admin_isolation/README.md) | `vpc_id` — security group that restricts admin endpoint access |
 
 The module is deliberately network-only. It creates **no security groups** of
@@ -111,8 +111,9 @@ and its staging counterpart in
 - [`../rds/README.md`](../rds/README.md),
   [`../redis/README.md`](../redis/README.md) — data-store modules that run
   inside the private subnets created here
-- [`../eks/`](../eks/), [`../admin_isolation/README.md`](../admin_isolation/README.md) —
-  the remaining consumers of `vpc_id`
+- [`../eks/README.md`](../eks/README.md),
+  [`../admin_isolation/README.md`](../admin_isolation/README.md) — the
+  remaining consumers of `vpc_id`
 - [`docs/admin-network-isolation.md`](../../../../docs/admin-network-isolation.md) —
   how the admin plane is kept off the public internet
 - [`docs/threat-model.md`](../../../../docs/threat-model.md) — network trust
