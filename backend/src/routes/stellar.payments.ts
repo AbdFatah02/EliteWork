@@ -1,12 +1,12 @@
+/**
+ * Stellar payment history route — migrated from routes-d/ (see docs/backend.md §13).
+ *
+ * GET /stellar/account/:address/payments
+ *   Returns paginated payment history for a Stellar account.
+ */
 import { Router, Request, Response } from "express";
-import * as StellarSdk from "@stellar/stellar-sdk";
-
-const STELLAR_NETWORK = process.env.STELLAR_NETWORK || "testnet";
-
-const HORIZON_URL =
-  STELLAR_NETWORK === "mainnet"
-    ? "https://horizon.stellar.org"
-    : "https://horizon-testnet.stellar.org";
+import { horizonServer } from "../config/stellar";
+import { appLogger } from "../middleware/logger";
 
 interface ParsedPayment {
   id: string;
@@ -23,6 +23,7 @@ interface ParsedPayment {
   pagingToken: string;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function parsePayment(record: any): ParsedPayment {
   const assetType = record.asset_type;
   let assetCode: string;
@@ -47,10 +48,7 @@ function parsePayment(record: any): ParsedPayment {
     id: record.id,
     type: record.type,
     amount: record.amount,
-    asset: {
-      code: assetCode,
-      issuer: assetIssuer,
-    },
+    asset: { code: assetCode, issuer: assetIssuer },
     from: record.from,
     to: record.to,
     memo,
@@ -79,9 +77,7 @@ export function createPaymentHistoryRouter(): Router {
     const limit = isNaN(limitParam) || limitParam < 1 ? 20 : Math.min(limitParam, 100);
 
     try {
-      const server = new StellarSdk.Horizon.Server(HORIZON_URL);
-
-      const paymentsCall = server
+      const paymentsCall = horizonServer
         .payments()
         .forAccount(address)
         .cursor(cursor)
@@ -89,28 +85,24 @@ export function createPaymentHistoryRouter(): Router {
         .order("desc");
 
       const response = await paymentsCall.call();
-
       const payments: ParsedPayment[] = response.records.map(parsePayment);
-
       const hasMore = response.records.length === limit;
       const nextCursor = hasMore
         ? response.records[response.records.length - 1].paging_token
         : null;
 
-      res.json({
-        payments,
-        pagination: {
-          nextCursor,
-          hasMore,
-          limit,
-        },
-      });
-    } catch (error: any) {
-      if (error?.response?.status === 404) {
+      res.json({ payments, pagination: { nextCursor, hasMore, limit } });
+    } catch (error: unknown) {
+      if (
+        typeof error === "object" && error !== null &&
+        "response" in error &&
+        (error as { response?: { status?: number } }).response?.status === 404
+      ) {
         res.json({ payments: [], pagination: { nextCursor: null, hasMore: false, limit } });
         return;
       }
 
+      appLogger.error({ error, address }, "Failed to fetch payment history from Stellar");
       const msg = error instanceof Error ? error.message : String(error);
       res.status(502).json({
         error: "Failed to fetch payment history from Stellar network",
@@ -121,3 +113,5 @@ export function createPaymentHistoryRouter(): Router {
 
   return router;
 }
+
+export const stellarPaymentsRoutes = createPaymentHistoryRouter();
