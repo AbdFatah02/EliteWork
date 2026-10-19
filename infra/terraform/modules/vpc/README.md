@@ -55,6 +55,7 @@ Every resource is tagged `Name` and `Environment`.
 | Name | Type | Description |
 |---|---|---|
 | `vpc_id` | `string` | ID of the VPC. Pass to `rds`, `redis`, `eks`, and `admin_isolation`. |
+| `vpc_cidr` | `string` | CIDR block of the VPC. Pass to the `allowed_cidr_blocks` of `rds` and `redis`. |
 | `public_subnet_ids` | `list(string)` | IDs of the public subnets, in `public_subnet_cidrs` order. |
 | `private_subnet_ids` | `list(string)` | IDs of the private subnets, in `private_subnet_cidrs` order. |
 | `nat_gateway_ids` | `list(string)` | IDs of the NAT gateways, in creation order. |
