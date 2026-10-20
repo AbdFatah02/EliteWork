@@ -18,7 +18,7 @@ None of these checks use `continue-on-error`; a failure blocks the merge.
 |-----------------------------|------------------------|------------|--------------------------------------------------------|
 | `Frontend Required Gate`    | `.github/workflows/ci.yml` | `frontend/` | `npm ci`, `npm run lint`, `npm run build`          |
 | `Backend Required Gate`     | `.github/workflows/ci.yml` | `backend/`  | `npm ci`, `npm run build`, representative smoke suite (auth, trade, events, validation) |
-| `Contracts Required Gate`   | `.github/workflows/ci.yml` | `contracts/` | `cargo test`                                      |
+| `Contracts Required Gate`   | `.github/workflows/ci.yml` | `contracts/` | `cargo audit`, deployment safety checks, test-coverage guard and `cargo test --locked` (26 integration suites + the inline `#[cfg(test)]` modules) |
 
 Path-aware skipping is enabled via `dorny/paths-filter`. When a stack has no changed files the
 gate emits a skip note and exits 0, so branch protection is satisfied without running unnecessary
@@ -63,7 +63,17 @@ Run this checklist after any change to `.github/workflows/ci.yml` or repository 
    check fails and the merge button is blocked.
 4. Confirm the `Backend Required Gate` runs the full smoke suite (auth, trade, events,
    validation) by inspecting the CI log for the expected test file names.
-5. Record the date of verification and the GitHub username of the reviewer in the table below.
+5. Confirm the `Contracts Required Gate` runs **every** contract test by checking the CI log
+   for the test-coverage guard output:
+   ```sh
+   # Expected: one line per integration suite, e.g. "storage_golden_tests"
+   grep -n "contract-test-coverage" <ci-log>
+   ```
+   The guard fails the gate when a suite under `contracts/amana_escrow/tests/` is not a
+   cargo test target, or when an inline test module under `contracts/amana_escrow/src/tests/`
+   is not declared in the module tree (such a file is never compiled and its tests never
+   run).
+6. Record the date of verification and the GitHub username of the reviewer in the table below.
 
 ## Verification Log
 
