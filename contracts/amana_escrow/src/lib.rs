@@ -1554,21 +1554,21 @@ impl EscrowContract {
             Self::update_release_sequence(&env, &trade, |sequence, at| {
                 sequence.cancelled_at = Some(at);
             });
-            Self::record_trade_event(
-                &env,
-                trade_id,
-                "clawback_full",
-                admin.clone(),
-                "admin full clawback — trade cancelled",
-            );
+        Self::record_trade_event(
+            &env,
+            trade_id,
+            "clawback_full",
+            admin.clone(),
+            "admin full clawback — trade cancelled",
+        );
         } else {
-            Self::record_trade_event(
-                &env,
-                trade_id,
-                "clawback_partial",
-                admin.clone(),
-                "admin partial clawback",
-            );
+        Self::record_trade_event(
+            &env,
+            trade_id,
+            "clawback_partial",
+            admin.clone(),
+            "admin partial clawback",
+        );
         }
 
         Self::save_trade(&env, &key, &trade);
@@ -1916,7 +1916,7 @@ impl EscrowContract {
             &env,
             trade_id,
             "created",
-            trade.buyer.clone(),
+            trade.buyer,
             "trade created",
         );
         TradeCreatedEvent {
@@ -1953,7 +1953,7 @@ impl EscrowContract {
             &env,
             trade_id,
             "funded",
-            trade.buyer.clone(),
+            trade.buyer,
             "escrow funded",
         );
         TradeFundedEvent {
@@ -2271,11 +2271,11 @@ impl EscrowContract {
         caller.require_auth();
 
         let key = DataKey::Trade(trade_id);
-        let mut trade: Trade = env
-            .storage()
-            .persistent()
-            .get(&key)
-            .expect("Trade not found");
+        // The trade is stored as a versioned `TradeData` envelope — reading it
+        // directly from persistent storage fails to convert and panics, and
+        // writing it back that way would corrupt the envelope for every later
+        // read. `load_trade`/`save_trade` are the only supported accessors.
+        let mut trade: Trade = Self::load_trade(&env, &key);
 
         assert!(
             caller == trade.buyer || caller == trade.seller,
@@ -2303,7 +2303,7 @@ impl EscrowContract {
 
         trade.status = TradeStatus::Cancelled;
         trade.updated_at = now;
-        env.storage().persistent().set(&key, &trade);
+        Self::save_trade(&env, &key, &trade);
 
         Self::update_release_sequence(&env, &trade, |sequence, at| {
             sequence.expired_at = Some(at);
@@ -2397,7 +2397,7 @@ impl EscrowContract {
             &env,
             trade_id,
             "deadline_extended",
-            trade.buyer.clone(),
+            trade.buyer,
             "delivery deadline extended",
         );
 
@@ -2543,7 +2543,7 @@ impl EscrowContract {
         });
 
         Self::record_trade_event(
-            env,
+            &env,
             trade.trade_id,
             "cancelled",
             caller.clone(),
@@ -2578,7 +2578,7 @@ impl EscrowContract {
             &env,
             trade_id,
             "delivered",
-            trade.buyer.clone(),
+            trade.buyer,
             "delivery confirmed",
         );
         DeliveryConfirmedEvent {
@@ -2645,7 +2645,7 @@ impl EscrowContract {
             &env,
             trade_id,
             "released",
-            caller.clone(),
+            caller,
             "funds released to seller",
         );
         FundsReleasedEvent {
@@ -2720,6 +2720,15 @@ impl EscrowContract {
         env.storage()
             .instance()
             .set(&DataKey::TotalDisputes, &(total_disputes + 1));
+
+        // Record trade history entry
+        Self::record_trade_event(
+            &env,
+            trade_id,
+            "disputed",
+            initiator.clone(),
+            "dispute initiated",
+        );
 
         // Emit on-chain event
         DisputeInitiatedEvent {
@@ -2882,6 +2891,13 @@ impl EscrowContract {
             .set(&DataKey::TotalResolved, &(total_resolved + 1));
 
         // 7. Emit event
+        Self::record_trade_event(
+            &env,
+            trade_id,
+            "resolved",
+            mediator.clone(),
+            "dispute resolved",
+        );
         DisputeResolvedEvent {
             trade_id,
             seller_payout: seller_net,
@@ -7320,8 +7336,11 @@ mod property_tests {
 
     impl Arbitrary for DisputeTestCase {
         fn arbitrary(g: &mut Gen) -> Self {
-            // Generate amounts that are realistic but varied
-            let total_amount = 1 + (i128::arbitrary(g) % 1_000_000);
+            // Generate amounts that are realistic but varied.
+            // `i128::arbitrary` can be negative and Rust's `%` keeps the sign of
+            // the dividend, so the magnitude is taken first — an escrow total
+            // is never negative.
+            let total_amount = 1 + (i128::arbitrary(g).unsigned_abs() % 1_000_000) as i128;
             let buyer_loss_bps = u32::arbitrary(g) % 10_001;
             let seller_loss_bps = u32::arbitrary(g) % 10_001;
             let seller_gets_bps = u32::arbitrary(g) % 10_001;
