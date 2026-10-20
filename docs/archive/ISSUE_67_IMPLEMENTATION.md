@@ -155,7 +155,7 @@ Created extensive tests covering all scenarios:
 2. `frontend/src/hooks/useFeatureFlags.ts` - React hook for feature flags
 3. `frontend/src/lib/__tests__/featureFlags.test.ts` - Feature flag tests
 4. `frontend/src/hooks/__tests__/useFeatureFlags.test.ts` - Hook tests
-5. `ISSUE_67_IMPLEMENTATION.md` - This implementation summary
+5. `docs/archive/ISSUE_67_IMPLEMENTATION.md` - This implementation summary
 
 ### Modified Files
 

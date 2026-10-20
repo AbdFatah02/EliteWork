@@ -172,7 +172,7 @@ Changes:
 4. `frontend/src/lib/stellar/__tests__/assets.test.ts` - Asset utilities tests
 5. `frontend/src/components/ui/__tests__/CurrencyInput.test.tsx` - Component tests
 6. `frontend/src/hooks/__tests__/useCurrencyInput.test.ts` - Hook tests
-7. `ISSUE_75_IMPLEMENTATION.md` - This implementation summary
+7. `docs/archive/ISSUE_75_IMPLEMENTATION.md` - This implementation summary
 
 ### Modified Files
 
