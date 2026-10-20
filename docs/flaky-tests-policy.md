@@ -82,6 +82,13 @@ Allowed scopes: `frontend` | `backend` | `contracts` | `e2e` | `other`.
 **Expired entries block CI.** `validate-flaky-quarantine.mjs` is a required gate
 on every push and PR (`validate-quarantine` job in `ci.yml`).
 
+The validator itself is covered by
+`scripts/__tests__/validate-flaky-quarantine.test.mjs`, which runs the real
+script against fixture registries and asserts both the passing and the failing
+branches (expired entries, missing fields, invalid scope/date, unreadable
+registry). The `Scripts Unit Tests` job in `ci.yml` runs that suite, so a bug
+in the validator cannot silently turn the gate into a no-op.
+
 ---
 
 ## 5. CI retry policy (bounded)
@@ -106,6 +113,7 @@ comment explaining why, and must be reviewed with extra scrutiny.
 | ---------------------- | --------------------------------------- | ------------------------------------------------------------------------------ |
 | Quarantine registry    | `.github/flaky-tests-quarantine.json`   | Source of truth for all quarantined tests                                      |
 | Registry validator     | `scripts/validate-flaky-quarantine.mjs` | Validates schema + expiry; run in every CI push/PR                             |
+| Validator unit tests   | `scripts/__tests__/validate-flaky-quarantine.test.mjs` | Executes the validator against fixture registries, so a bug in the validator cannot silently disable the gate |
 | Flake reporter         | `scripts/flake-reporter.mjs`            | Detects pass-after-retry candidates from Jest JSON; emits per-run reports      |
 | Weekly report workflow | `.github/workflows/flaky-report.yml`    | Aggregates per-run reports; posts ranked table to job summary                  |
 | CI integration         | `.github/workflows/ci.yml`              | `validate-quarantine` job; `--json` flag on test steps; flake candidate upload |
@@ -123,6 +131,9 @@ node scripts/flake-reporter.mjs \
   --results frontend/jest-results.json \
   --scope frontend \
   --output /tmp/flake-report.json
+
+# Unit tests for the gate scripts themselves (root of the repo)
+pnpm test:scripts
 ```
 
 ---
