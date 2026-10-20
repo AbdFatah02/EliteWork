@@ -101,8 +101,8 @@ aws secretsmanager put-secret-value \
 
 ## Related
 
-- [`../eks`](../eks/) — provides the `node_role_arn` used to attach the read
-  policy
+- [`../eks/README.md`](../eks/README.md) — provides the `node_role_arn` used to
+  attach the read policy
 - [`infra/terraform/environments/dev/main.tf`](../../environments/dev/main.tf) —
   dev wiring
 - [`docs/admin-secret-management.md`](../../../../docs/admin-secret-management.md) —

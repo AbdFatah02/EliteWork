@@ -104,7 +104,7 @@ The backend reads this from `REDIS_URL`
 ## Operational notes
 
 - **`replica_count` includes the primary.** It is passed straight to
-  `number_cache_clusters`, so the default `2` means one primary plus one
+  `num_cache_clusters`, so the default `2` means one primary plus one
   replica — not two replicas.
 - **Failover and Multi-AZ need at least two cache clusters.** AWS rejects
   `automatic_failover_enabled = true` or `multi_az_enabled = true` on a group
