@@ -1,51 +1,44 @@
 /**
- * Tests for scripts/validate-flaky-quarantine.mjs
+ * Tests for scripts/validate-flaky-quarantine.mjs (issue #334).
  *
- * The validation logic is imported from the script itself, so the tests cover
- * the rules that actually run in CI. The CLI is exercised through the
- * `--registry` override.
+ * The script is a CI gate: the `validate-quarantine` job in ci.yml runs it on
+ * every push and PR, and the `flaky-report.yml` workflow runs it too. A bug
+ * *in the script itself* (for example always exiting 0) would silently
+ * disable the gate it enforces, so these tests execute the real script and
+ * assert on its exit code and output for both the passing and the failing
+ * branches.
+ *
+ * The rules are deliberately NOT re-implemented here. A mirrored copy of the
+ * validation logic can drift from the script and keep passing while the
+ * script is broken — the exact failure mode this file exists to prevent.
+ *
+ * The script resolves the registry relative to its own location
+ * (`<script dir>/../.github/flaky-tests-quarantine.json`), so each test copies
+ * the committed script into a temporary tree and drops the fixture registry at
+ * that exact relative path. The code under test is byte-identical to the
+ * committed script.
  */
 
-import { execFileSync } from "child_process";
-import { writeFileSync, mkdtempSync, rmSync, existsSync } from "fs";
+import { spawnSync } from "child_process";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
-import {
-  MAX_EXPIRY_DAYS,
-  parseArgs,
-  validateRegistry,
-} from "../validate-flaky-quarantine.mjs";
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SCRIPTS_DIR = join(HERE, "..");
+const REPO_ROOT = join(SCRIPTS_DIR, "..");
+const SCRIPT = join(SCRIPTS_DIR, "validate-flaky-quarantine.mjs");
+const REAL_REGISTRY = join(REPO_ROOT, ".github", "flaky-tests-quarantine.json");
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const SCRIPT = join(__dirname, "../../scripts/validate-flaky-quarantine.mjs");
-const TMP = mkdtempSync(join(tmpdir(), "flaky-quarantine-test-"));
-
-function registryPath() {
-  return join(TMP, "flaky-tests-quarantine.json");
-}
-
-function writeRegistry(entries) {
-  writeFileSync(
-    registryPath(),
-    JSON.stringify({ version: "1", entries }),
-    "utf8",
-  );
-}
-
-function runValidator(entries, extraArgs = []) {
-  writeRegistry(entries);
-  try {
-    execFileSync("node", [SCRIPT, "--registry", registryPath(), ...extraArgs], {
-      stdio: "pipe",
-    });
-    return { status: 0 };
-  } catch (err) {
-    return { status: err.status ?? 1, stderr: err.stderr?.toString() ?? "" };
-  }
-}
-
+const ALLOWED_SCOPES = ["frontend", "backend", "contracts", "e2e", "other"];
 const REQUIRED_FIELDS = [
   "owner",
   "expires_on",
@@ -55,218 +48,235 @@ const REQUIRED_FIELDS = [
   "mitigation",
 ];
 
-function daysFromNow(days) {
+/** ISO date (YYYY-MM-DD) `offsetDays` away from today. */
+function isoDate(offsetDays) {
   const d = new Date();
-  d.setDate(d.getDate() + days);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + offsetDays);
   return d.toISOString().slice(0, 10);
 }
 
+const FUTURE = isoDate(14);
+const PAST = isoDate(-1);
+
 const VALID_ENTRY = {
   owner: "test-user",
-  expires_on: daysFromNow(14),
+  expires_on: FUTURE,
   scope: "frontend",
   pattern: "src/components/Foo.test.tsx",
   reason: "Async race — #42",
   mitigation: "retryTimes(1)",
 };
 
-afterAll(() => {
-  if (existsSync(TMP)) rmSync(TMP, { recursive: true, force: true });
-});
+/**
+ * Runs the real validator against a fixture registry.
+ *
+ * @param {unknown[]|string|undefined} registry
+ *   Array of entries -> written as `{ version, entries }`.
+ *   String           -> written verbatim (used for malformed JSON).
+ *   `undefined`      -> the registry file is not created at all.
+ * @param {string[]} args extra CLI arguments for the script.
+ */
+function runValidator(registry, args = []) {
+  const root = mkdtempSync(join(tmpdir(), "flaky-quarantine-"));
+  try {
+    const scriptDir = join(root, "scripts");
+    mkdirSync(scriptDir, { recursive: true });
+    copyFileSync(SCRIPT, join(scriptDir, "validate-flaky-quarantine.mjs"));
 
-// ─── Pure validation logic tests ───────────────────────────────────────────
-
-describe("validate-flaky-quarantine logic", () => {
-  describe("empty registry", () => {
-    it("passes with zero entries", () => {
-      expect(validateRegistry({ entries: [] }).errors).toHaveLength(0);
-    });
-
-    it("fails when entries is not an array", () => {
-      expect(validateRegistry({ entries: "nope" }).errors).toHaveLength(1);
-    });
-  });
-
-  describe("valid entry", () => {
-    it("passes for a fully populated valid entry", () => {
-      expect(validateRegistry({ entries: [VALID_ENTRY] }).errors).toHaveLength(0);
-    });
-
-    it("passes for all allowed scopes", () => {
-      for (const scope of ["frontend", "backend", "contracts", "e2e", "other"]) {
-        const entry = { ...VALID_ENTRY, scope };
-        expect(validateRegistry({ entries: [entry] }).errors).toHaveLength(0);
-      }
-    });
-  });
-
-  describe("missing required fields", () => {
-    for (const field of REQUIRED_FIELDS) {
-      it(`fails when "${field}" is missing`, () => {
-        const entry = { ...VALID_ENTRY };
-        delete entry[field];
-        const { errors } = validateRegistry({ entries: [entry] });
-        expect(errors.some((e) => e.includes(field))).toBe(true);
-      });
-    }
-  });
-
-  describe("expires_on format", () => {
-    it("fails for invalid date format MM/DD/YYYY", () => {
-      const entry = { ...VALID_ENTRY, expires_on: "12/31/2099" };
-      expect(
-        validateRegistry({ entries: [entry] }).errors.some((e) =>
-          e.includes("expires_on"),
-        ),
-      ).toBe(true);
-    });
-
-    it("fails for ISO datetime instead of date", () => {
-      const entry = { ...VALID_ENTRY, expires_on: "2099-12-31T00:00:00Z" };
-      expect(
-        validateRegistry({ entries: [entry] }).errors.some((e) =>
-          e.includes("expires_on"),
-        ),
-      ).toBe(true);
-    });
-
-    it("passes for YYYY-MM-DD in future", () => {
-      expect(
-        validateRegistry({ entries: [{ ...VALID_ENTRY, expires_on: daysFromNow(3) }] })
-          .errors,
-      ).toHaveLength(0);
-    });
-  });
-
-  describe("expired entries", () => {
-    it("fails when expires_on is yesterday", () => {
-      const entry = { ...VALID_ENTRY, expires_on: daysFromNow(-1) };
-      const { errors } = validateRegistry({ entries: [entry] });
-      expect(errors.some((e) => e.includes("past"))).toBe(true);
-    });
-
-    it("does not fail when allowExpired=true", () => {
-      const entry = { ...VALID_ENTRY, expires_on: daysFromNow(-1) };
-      const { errors, warnings } = validateRegistry(
-        { entries: [entry] },
-        { allowExpired: true },
+    if (registry !== undefined) {
+      const githubDir = join(root, ".github");
+      mkdirSync(githubDir, { recursive: true });
+      const body =
+        typeof registry === "string"
+          ? registry
+          : JSON.stringify({ version: "1", entries: registry }, null, 2);
+      writeFileSync(
+        join(githubDir, "flaky-tests-quarantine.json"),
+        body,
+        "utf8",
       );
-      expect(errors).toHaveLength(0);
-      expect(warnings.some((w) => w.includes("past"))).toBe(true);
-    });
-  });
+    }
 
-  describe("expiry window (policy §4)", () => {
-    it("fails when the quarantine expires further out than the allowed window", () => {
-      const entry = {
-        ...VALID_ENTRY,
-        expires_on: daysFromNow(MAX_EXPIRY_DAYS + 5),
-      };
-      const { errors } = validateRegistry({ entries: [entry] });
-      expect(errors.some((e) => e.includes("justification"))).toBe(true);
-    });
-
-    it("accepts a longer quarantine when a justification is recorded", () => {
-      const entry = {
-        ...VALID_ENTRY,
-        expires_on: daysFromNow(MAX_EXPIRY_DAYS + 5),
-        justification: "Vendor fix lands in the next release train",
-      };
-      const { errors, warnings } = validateRegistry({ entries: [entry] });
-      expect(errors).toHaveLength(0);
-      expect(warnings.some((w) => w.includes("justification"))).toBe(true);
-    });
-
-    it("accepts an expiry exactly on the window limit", () => {
-      const entry = { ...VALID_ENTRY, expires_on: daysFromNow(MAX_EXPIRY_DAYS) };
-      expect(validateRegistry({ entries: [entry] }).errors).toHaveLength(0);
-    });
-  });
-
-  describe("invalid scope", () => {
-    it("fails for unknown scope value", () => {
-      const entry = { ...VALID_ENTRY, scope: "mobile" };
-      expect(
-        validateRegistry({ entries: [entry] }).errors.some((e) =>
-          e.includes("scope"),
-        ),
-      ).toBe(true);
-    });
-  });
-
-  describe("duplicate entries", () => {
-    it("fails when the same scope and pattern is quarantined twice", () => {
-      const entries = [VALID_ENTRY, { ...VALID_ENTRY, owner: "other" }];
-      expect(
-        validateRegistry({ entries }).errors.some((e) =>
-          e.includes("duplicate"),
-        ),
-      ).toBe(true);
-    });
-
-    it("allows the same pattern in a different scope", () => {
-      const entries = [VALID_ENTRY, { ...VALID_ENTRY, scope: "backend" }];
-      expect(validateRegistry({ entries }).errors).toHaveLength(0);
-    });
-  });
-
-  describe("owner", () => {
-    it("warns when the owner does not look like a GitHub username", () => {
-      const entry = { ...VALID_ENTRY, owner: "platform team" };
-      const { errors, warnings } = validateRegistry({ entries: [entry] });
-      expect(errors).toHaveLength(0);
-      expect(warnings.some((w) => w.includes("owner"))).toBe(true);
-    });
-  });
-
-  describe("multiple entries", () => {
-    it("collects errors from all entries independently", () => {
-      const bad1 = { ...VALID_ENTRY, expires_on: daysFromNow(-1) };
-      const bad2 = { ...VALID_ENTRY, scope: "unknown" };
-      const { errors } = validateRegistry({ entries: [bad1, bad2] });
-      expect(errors.length).toBeGreaterThanOrEqual(2);
-    });
-
-    it("passes when all entries are valid", () => {
-      const entries = Array.from({ length: 5 }, (_, i) => ({
-        ...VALID_ENTRY,
-        pattern: `src/test-${i}.test.ts`,
-      }));
-      expect(validateRegistry({ entries }).errors).toHaveLength(0);
-    });
-  });
-});
-
-// ─── Script smoke test (exit codes) ────────────────────────────────────────
-
-describe("validate-flaky-quarantine.mjs — CLI", () => {
-  it("exits 0 for an empty registry file", () => {
-    expect(runValidator([]).status).toBe(0);
-  });
-
-  it("exits 1 for an expired entry", () => {
-    const result = runValidator([{ ...VALID_ENTRY, expires_on: daysFromNow(-1) }]);
-    expect(result.status).toBe(1);
-    expect(result.stderr).toContain("expired");
-  });
-
-  it("exits 0 for an expired entry with --allow-expired", () => {
-    const result = runValidator(
-      [{ ...VALID_ENTRY, expires_on: daysFromNow(-1) }],
-      ["--allow-expired"],
+    const result = spawnSync(
+      process.execPath,
+      [join(scriptDir, "validate-flaky-quarantine.mjs"), ...args],
+      { encoding: "utf8" },
     );
+
+    return {
+      status: result.status,
+      stdout: result.stdout ?? "",
+      stderr: result.stderr ?? "",
+    };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+// ─── Passing branches ──────────────────────────────────────────────────────
+
+describe("validate-flaky-quarantine.mjs — passing branches", () => {
+  it("exits 0 for a registry with no entries", () => {
+    const result = runValidator([]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/OK — 0 quarantine entries validated/);
+  });
+
+  it("exits 0 for a fully populated valid entry", () => {
+    const result = runValidator([VALID_ENTRY]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/OK — 1 quarantine entry validated/);
+  });
+
+  it.each(ALLOWED_SCOPES)("accepts the %s scope", (scope) => {
+    const result = runValidator([{ ...VALID_ENTRY, scope }]);
+
     expect(result.status).toBe(0);
   });
 
-  it("parses the --registry override", () => {
-    const args = parseArgs([
-      "node",
-      "script.mjs",
-      "--registry",
-      "/tmp/registry.json",
+  it("exits 0 when every entry is valid", () => {
+    const entries = Array.from({ length: 5 }, (_, i) => ({
+      ...VALID_ENTRY,
+      pattern: `src/test-${i}.test.ts`,
+    }));
+
+    const result = runValidator(entries);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/OK — 5 quarantine entries validated/);
+  });
+});
+
+// ─── Failing branches ──────────────────────────────────────────────────────
+
+describe("validate-flaky-quarantine.mjs — failing branches", () => {
+  it.each(REQUIRED_FIELDS)('fails when "%s" is missing', (field) => {
+    const entry = { ...VALID_ENTRY };
+    delete entry[field];
+
+    const result = runValidator([entry]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`missing required field "${field}"`);
+  });
+
+  it("fails when expires_on is not in YYYY-MM-DD format", () => {
+    const result = runValidator([{ ...VALID_ENTRY, expires_on: "12/31/2099" }]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/is not YYYY-MM-DD format/);
+  });
+
+  it("fails when expires_on is an ISO datetime instead of a date", () => {
+    const result = runValidator([
+      { ...VALID_ENTRY, expires_on: "2099-12-31T00:00:00Z" },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/is not YYYY-MM-DD format/);
+  });
+
+  it("fails when expires_on is not a real calendar date", () => {
+    // Month 13 is rejected outright by the date parser, unlike an
+    // out-of-range day (e.g. 2099-02-30), which JavaScript silently rolls
+    // over into the following month.
+    const result = runValidator([{ ...VALID_ENTRY, expires_on: "2099-13-01" }]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/is not a valid date/);
+  });
+
+  it("fails when an entry has expired", () => {
+    const result = runValidator([{ ...VALID_ENTRY, expires_on: PAST }]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/is in the past/);
+    expect(result.stderr).toMatch(/FAILED — 1 error\(s\) found/);
+  });
+
+  it("fails when scope is not an allowed value", () => {
+    const result = runValidator([{ ...VALID_ENTRY, scope: "mobile" }]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(
+      /scope "mobile" is not one of \[frontend, backend, contracts, e2e, other\]/,
+    );
+  });
+
+  it("reports every error it finds, not just the first", () => {
+    const result = runValidator([
+      { ...VALID_ENTRY, expires_on: PAST },
+      { ...VALID_ENTRY, scope: "unknown" },
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/is in the past/);
+    expect(result.stderr).toMatch(/scope "unknown" is not one of/);
+    expect(result.stderr).toMatch(/FAILED — 2 error\(s\) found/);
+  });
+
+  it("fails when the registry file is missing", () => {
+    const result = runValidator(undefined);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/Cannot read registry/);
+  });
+
+  it("fails when the registry is not valid JSON", () => {
+    const result = runValidator("{ not json ");
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/Cannot read registry/);
+  });
+
+  it("fails when registry.entries is not an array", () => {
+    const result = runValidator('{"version":"1","entries":{"a":1}}');
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/registry\.entries must be an array/);
+  });
+});
+
+// ─── --allow-expired branch ────────────────────────────────────────────────
+
+describe("validate-flaky-quarantine.mjs — --allow-expired", () => {
+  it("downgrades an expired entry to a warning and exits 0", () => {
+    const result = runValidator([{ ...VALID_ENTRY, expires_on: PAST }], [
       "--allow-expired",
     ]);
-    expect(args.registry).toBe("/tmp/registry.json");
-    expect(args.allowExpired).toBe(true);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toMatch(/WARNINGS:/);
+    expect(result.stderr).toMatch(/is in the past/);
+    expect(result.stdout).toMatch(/OK — 1 quarantine entry validated/);
+  });
+
+  it("still fails on non-expiry errors with --allow-expired", () => {
+    const result = runValidator([{ ...VALID_ENTRY, scope: "mobile" }], [
+      "--allow-expired",
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/scope "mobile" is not one of/);
+  });
+});
+
+// ─── The registry that actually gates CI ───────────────────────────────────
+
+describe("validate-flaky-quarantine.mjs — committed registry", () => {
+  it("has a registry file to validate", () => {
+    expect(existsSync(REAL_REGISTRY)).toBe(true);
+  });
+
+  it("passes for the registry committed to the repository", () => {
+    // Runs the committed script with its default registry path — the exact
+    // invocation CI performs.
+    const result = spawnSync(process.execPath, [SCRIPT], { encoding: "utf8" });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/\[flaky-quarantine\] OK/);
   });
 });

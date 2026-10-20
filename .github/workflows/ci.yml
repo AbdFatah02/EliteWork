@@ -72,13 +72,39 @@ jobs:
               - 'contracts/amana_escrow/src/generated/**'
               - 'backend/src/types/generated/**'
 
-  # Dedicated signal for the quarantine registry. The stack gates below ALSO
-  # run this check as their first step: a job that only *depends* on a failing
-  # job is skipped, and skipped required checks do not block a merge — so the
-  # validation has to happen inside the gates themselves.
+  # The scripts/ tree holds CI gates (quarantine registry validator, contract
+  # determinism verifier, lockfile drift check, ...). A bug inside a gate
+  # script would silently disable the gate it enforces, so the gates are
+  # themselves covered by unit tests (scripts/__tests__). Those tests must be
+  # green before the gates below are trusted, hence `validate-quarantine`
+  # depends on this job.
+  scripts-tests:
+    name: Scripts Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Test scripts
+        run: pnpm test:scripts
+
   validate-quarantine:
     name: Validate flaky-tests quarantine registry
     runs-on: ubuntu-latest
+    needs: [scripts-tests]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

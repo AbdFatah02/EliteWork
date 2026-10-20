@@ -281,7 +281,7 @@ cargo test --test gas_benchmark_tests -- --nocapture
   - WASM hash verification script
   - 150+ lines of shell script with color output
 
-- `STELLAR_WAVE_IMPLEMENTATION.md` (THIS FILE):
+- `docs/archive/STELLAR_WAVE_IMPLEMENTATION.md` (THIS FILE):
   - Summary of all 4 issues and implementations
 
 ---
@@ -330,7 +330,7 @@ cargo test --test gas_benchmark_tests -- --nocapture
 
 ### Documentation
 - [x] TIMELOCK_POLICY.md: Complete policy & threat model
-- [x] STELLAR_WAVE_IMPLEMENTATION.md: This summary
+- [x] docs/archive/STELLAR_WAVE_IMPLEMENTATION.md: This summary
 - [x] Deployment safety script with usage instructions
 - [x] Inline code comments for new functions
 

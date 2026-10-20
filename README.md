@@ -79,6 +79,7 @@ The backend writes `backend/src/docs/openapi.json` from the YAML spec in non-pro
 Amana enforces stack-level CI gates on pull requests through `.github/workflows/ci.yml`.
 
 - **Lockfile Drift Check**: `./scripts/check-lockfile-drift.sh` — fails fast if a `pnpm-lock.yaml`/`package-lock.json` is out of sync with its `package.json`, or if a stray `package-lock.json` reappears in pnpm-managed `frontend/`/`backend/`/`mobile/`
+- **Scripts Unit Tests**: `pnpm test:scripts` at the repo root — runs the unit tests for the CI gate scripts in `scripts/` (e.g. the quarantine registry validator and the contract determinism verifier), so a bug inside a gate cannot silently disable it
 - **Frontend Required Gate**: `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm build`, `pnpm test` in `frontend/`
 - **Backend Required Gate**: `pnpm install --frozen-lockfile`, `pnpm build`, `pnpm test` in `backend/`
 - **Mobile Required Gate**: `pnpm install --frozen-lockfile`, `pnpm type-check`, `pnpm lint` in `mobile/`

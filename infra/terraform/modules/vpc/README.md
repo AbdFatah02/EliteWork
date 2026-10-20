@@ -13,8 +13,8 @@ in `infra/terraform/modules/` consumes its outputs:
 |---|---|
 | [`rds`](../rds/README.md) | `vpc_id`, `private_subnet_ids` — Aurora cluster placement and its security group |
 | [`redis`](../redis/README.md) | `vpc_id`, `private_subnet_ids` — ElastiCache replication group placement and its security group |
-| [`eks`](../eks/) | `vpc_id`, `private_subnet_ids` — control plane VPC config and node group subnets |
-| [`admin_isolation`](../admin_isolation/) | `vpc_id` — security group that restricts admin endpoint access |
+| [`eks`](../eks/README.md) | `vpc_id`, `private_subnet_ids` — control plane VPC config and node group subnets |
+| [`admin_isolation`](../admin_isolation/README.md) | `vpc_id` — security group that restricts admin endpoint access |
 
 The module is deliberately network-only. It creates **no security groups** of
 its own: data-store security groups live in the `rds` and `redis` modules, and
@@ -55,6 +55,7 @@ Every resource is tagged `Name` and `Environment`.
 | Name | Type | Description |
 |---|---|---|
 | `vpc_id` | `string` | ID of the VPC. Pass to `rds`, `redis`, `eks`, and `admin_isolation`. |
+| `vpc_cidr` | `string` | CIDR block of the VPC. Pass to the `allowed_cidr_blocks` of `rds` and `redis`. |
 | `public_subnet_ids` | `list(string)` | IDs of the public subnets, in `public_subnet_cidrs` order. |
 | `private_subnet_ids` | `list(string)` | IDs of the private subnets, in `private_subnet_cidrs` order. |
 | `nat_gateway_ids` | `list(string)` | IDs of the NAT gateways, in creation order. |
@@ -110,7 +111,8 @@ and its staging counterpart in
 - [`../rds/README.md`](../rds/README.md),
   [`../redis/README.md`](../redis/README.md) — data-store modules that run
   inside the private subnets created here
-- [`../eks/`](../eks/), [`../admin_isolation/`](../admin_isolation/) — the
+- [`../eks/README.md`](../eks/README.md),
+  [`../admin_isolation/README.md`](../admin_isolation/README.md) — the
   remaining consumers of `vpc_id`
 - [`docs/admin-network-isolation.md`](../../../../docs/admin-network-isolation.md) —
   how the admin plane is kept off the public internet
